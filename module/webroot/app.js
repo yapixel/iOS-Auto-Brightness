@@ -4,7 +4,7 @@ const root = '/data/adb/modules/ios_auto_brightness';
 const quote = (s) => `'${String(s).replace(/'/g, "'\\''")}'`;
 let sequence = 0, busy = false, polling = false, dirty = false;
 let legacyGamma = '2.2', runtime = null, rawInvalid = false;
-const isTest = typeof navigator === 'undefined';
+const isTest = typeof HTMLElement === 'undefined';
 let lang = isTest ? 'zh' : ((typeof localStorage !== 'undefined' && localStorage.getItem('iab_lang')) || 'en');
 
 const deviceMap = {
@@ -191,7 +191,7 @@ function applyLanguage(l) {
     const el = $(id);
     if (el) {
       if (id === 'importLabel' || id === 'configImportLabel') {
-        const input = el.querySelector('input');
+        const input = el.querySelector ? el.querySelector('input') : (el.children ? el.children.find(c => c.tag === 'input' || c.id === 'import' || c.id === 'configImport') : null);
         el.textContent = text;
         if (input) el.append(input);
       } else {
