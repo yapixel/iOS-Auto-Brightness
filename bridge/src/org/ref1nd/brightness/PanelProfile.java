@@ -41,6 +41,15 @@ public final class PanelProfile {
     public static PanelProfile generic(String identity) throws Exception {
         return new PanelProfile(new float[]{0,1,5,20,100,300,538.5f},new float[]{0,.01f,.025f,.06f,.2f,.55f,1},identity,false);
     }
+    public static PanelProfile fromFile(java.io.File file,String identity) throws Exception {
+        try(java.util.Scanner s=new java.util.Scanner(file).useLocale(java.util.Locale.ROOT)) {
+            if(!s.next().equals("IAB_PROFILE_V1"))throw new IllegalArgumentException("profile format");
+            s.next();int n=s.nextInt();
+            float[] nits=new float[n], brightness=new float[n];
+            for(int i=0;i<n;i++){nits[i]=s.nextFloat();brightness[i]=s.nextFloat();}
+            return new PanelProfile(nits,brightness,identity,true);
+        }
+    }
     public boolean matches(String text) {
         try(java.util.Scanner s=new java.util.Scanner(text).useLocale(java.util.Locale.ROOT)) {
             if(!s.next().equals("IAB_PROFILE_V1"))return false;s.next();if(s.nextInt()!=nits.length)return false;

@@ -1,17 +1,32 @@
-> 以下为原目标设备的历史适配记录。beta.7 起取消型号/分辨率硬限制，当前规则见 [兼容性说明](COMPATIBILITY.md)。
-
 # 目标设备适配
 
-初始读取日期：2026-10-15。设备由用户确认为小米 17 Pro Max，HyperOS OS4.0.2.0.XPBCNXM / Android 17（API 37），KernelSU。
+初始读取日期：2026-10-15。当前分支支持联想拯救者 Y700 无极 / 第五代（TB324ZC）与 Google Pixel 7 Pro（cheetah），运行 Android 16（API 36）/ KernelSU；同时保留小米 17 Pro Max（altdb）作为兼容基线。
 
 ## 硬件与接口
 
+### 联想拯救者 Y700 无极（第五代 / TB324ZC）
+- 主屏 1600 × 2560（物理密度 360 dpi，支持 30/60/120/144/165 Hz），内部显示 ID 为 `local:4630946653341585811`。单内置屏架构，无独立背屏，模块只向 Display 0 发出调光请求。
+- 主屏 sysfs 背光节点为 `/sys/class/backlight/panel0-backlight`，最大背光值为 4095。
+- 主光线传感器：`stk_stk3a5x Ambient Light Sensor Non-wakeup`（sensortek，`android.sensor.light` 类型，`on-change` 模式）；距离感应器为 `stk_stk3a5x Proximity Sensor Wakeup`。平板硬件无后置辅助光感（标记 `back_sensor: "unavailable"`，`back_lux` 置为 -1）。
+- 主屏亮度标定取自显示服务的 `mBacklight` / `mNits`（`/vendor/etc/displayconfig/display_id_4630946653341585811.xml`），共 14 点严格递增映射，记录在 `module/profiles/y700.profile`（最低标定 9.924256 nits @ 0.00024 至峰值 1410.7161 nits @ 1.0）。
+
+### Google Pixel 7 Pro（cheetah）
+- 主屏 6.7 英寸 LTPO OLED，支持双分辨率档位切换：QHD+（1440 × 3120，560 dpi）与 FHD+（1080 × 2340，420 dpi），支持 10~120 Hz 自适应刷新率。内部显示 ID 为 `local:4619827677550801152`。
+- 主屏 sysfs 背光节点为 `/sys/class/backlight/panel0-backlight`（最大背光 4095）。
+- 传感器矩阵：
+  - 前置主光感：`TMD3719 Ambient Light`（AMS，`android.sensor.light`，`on-change` 模式，非唤醒）。
+  - 后置辅助光感：`VD6282 Rear Light Sensor`（STMicro，`com.google.sensor.rear_light` 类型，连续采样模式，非唤醒）。
+  - 距离感应器：`TMD3719 Proximity (wake-up)`。
+  - 完备支持上游 `ambient_guard` 前后光感冲突防护与交叉校验。
+- 主屏亮度标定：取自系统显示服务诊断与 `/vendor/etc/displayconfig/display_id_4619827677550801152.xml`，分段线性锚点为 2.0 nits（背光 0.0）、600.0 nits（背光 0.6 手动上限）、1000.0 nits（背光 1.0 阳光高亮），保存为 `module/profiles/cheetah.profile`。
+- 桥接层按屏幕几何尺寸（横竖屏 1080 × 2340 / 2340 × 1080 与 1440 × 3120 / 3120 × 1440）自动识别并加载 `cheetah.profile`。
+- 温控采集支持 `thermal_zone15`（battery）与 `thermal_zone8`（`quiet_therm`，机身表面测温）。
+
+### 小米 17 Pro Max（altdb）
 - 主屏 1200 × 2608；背屏 976 × 596。模块只向 Display 0 发出调光请求。
-- 主屏 sysfs 最大背光 16383，存在独立的 panel1 背屏节点。新实现不写这些节点，也不修改节点权限。
+- 主屏 sysfs 最大背光 16383，存在独立的 panel1 背屏节点。
 - 主光线传感器：tcs3760 Ambient Light Sensor Non-wakeup；背侧辅助传感器为厂商 back_lux 类型。
-- 系统设置存储为 ABX 二进制格式。旧核心按文本 XML 读取的路径不适用。
-- 主屏亮度标定取自显示服务的 `mBacklight` / `mNits`，记录在 `module/profiles/altdb.profile`。这是一组设备标定数据，不是从闭源实现复制的代码。
-- 设备代号在普通 shell 和 root 环境中可能不同；适配以主屏几何信息及运行时标定表吻合为前提，不以可被修改的 Build.DEVICE 判断。
+- 主屏亮度标定记录在 `module/profiles/altdb.profile`。
 
 ## 控制与学习
 
@@ -21,9 +36,9 @@
 
 当前桥接由 root 进程执行。若 ROM 不向它提供其他用户的事件，其他用户仍隔离存储且不误学习用户 0 的记录；不能把此限制当作多用户真机验收通过。
 
-按变化上报的光感在读数稳定时沿用已有值，不周期性注销和重注册；连续上报型传感器长时间无事件时才尝试恢复。唤醒后等待 2 秒再接管，同时要求主屏开启且系统处于交互状态，避免把息屏显示脉冲当作正常亮屏。beta.4 在前置不可用时使用后置备用输入，前后均不可用时才在后台尝试严格校验的 sysfs/IIO/传感器诊断回退；所有输入不可用时释放控制。回退来源及失败原因可见运行状态，回退期间不学习。
+按变化上报的光感（如 Y700 的 `stk_stk3a5x`）在读数稳定时沿用已有值，不周期性注销和重注册；连续上报型传感器长时间无事件时才尝试恢复。唤醒后等待 2 秒再接管，同时要求主屏开启且系统处于交互状态，避免把息屏显示脉冲当作正常亮屏。针对无后置光感的平板设备，桥接层标记 `back_sensor: "unavailable"` 并将 `back_lux` 置为 -1，核心算法完全由主光感独立驱动，跳过强光突增双光感交叉校验要求。
 
-后置辅助光感也按上报模式判断时效：注册成功并收到首个有效样本后，按变化上报的稳定值持续有效；连续上报的读数满 30 秒无更新后忽略。锁屏、切到手动模式或重新注册会清除缓存，注册失败也不会沿用旧值。状态中的 `back_lux_effective` 是实际送入核心的值，`back_sample_age_ms` 记录样本年龄（无样本为 -1）。beta.12 起，两侧有效时取较亮侧用于控制与学习；后置事件也会唤醒处理。该通用规则不等同于 HyperOS 原生融合；原始前置另用于位置变化检查。
+机身温度采集支持电池温度（battery）及机身表面温控区域（`quiet_therm` / `user_temp` / `front_temp` / `back_temp` / `skin` / `shell`）。温度不可用或过高时禁止额外强光增强，始终服从系统亮度上限。
 
 ## 开发测试与回退
 

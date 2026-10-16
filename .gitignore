@@ -22,6 +22,8 @@ local.properties
 .vscode/
 *.log
 *.pid
+__pycache__/
+*.pyc
 
 # Signing material
 *.jks

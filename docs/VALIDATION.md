@@ -198,3 +198,31 @@ ADB 重连时设备已处于另一次开机，确认 beta.10 服务健康后建�
 ```
 
 通过 KernelSU 安装该 Actions 产物，自动热更新成功；运行版本及源码提交匹配，连续健康检查 healthy，update-status=ready，管理器 enabled=true、web=true、update=false。安装前后 boot ID 一致，没有重启；配置、旧学习文件及备份、旧偏移文件哈希一致。没有调整系统亮度或温控状态。安装后手机熄屏，桥接正常运行并处于 screen_off；阳光下真实解锁观感、进入/离开强光及高温场景尚需真机复验，不以 CI 结果替代现场验收。
+
+## 联想拯救者 Y700 无极（第五代 / TB324ZC）真机适配验证
+
+- **设备与环境**：Lenovo TB324ZC (Legion Y700 Wuji / 第五代) / Android 16 (API 36 / ZUXOS 2.0.10.223) / Linux 6.12.38 / KernelSU 3.3.1-2。
+- **真机读取与确认**：
+  - Display 0 识别为 `local:4630946653341585811`，主屏几何尺寸 1600 × 2560（密度 360 dpi），无背屏。
+  - sysfs 节点确认：`/sys/class/backlight/panel0-backlight`（最大背光 4095）。
+  - 运行时标定表读取：`mBacklight` 与 `mNits` 成功提取自系统显示服务诊断及 `/vendor/etc/displayconfig/display_id_4630946653341585811.xml`，校验生成 14 组严格递增标定点，保存为 `module/profiles/y700.profile`。
+  - 传感器确认：主光感为 `stk_stk3a5x Ambient Light Sensor Non-wakeup`（`on-change` 模式），距离传感器为 `stk_stk3a5x Proximity Sensor Wakeup`；确认无后置辅助光感。
+  - 诊断与接口：`getBrightnessEvents()`、`setTemporaryBrightness` 反射可用，BrightnessTracker 正常运行；电池节点及 `thermal_zone91`（battery）、机身表面温控可用。
+- **自动化契约与协议回归**：
+  - `core_tests`（110,055 项契约检查）及 `feature_tests` 全部通过。
+  - `protocol_test.py` 针对 `y700.profile`（14 点）、`cheetah.profile`（3 点）及 `altdb.profile`（9 点）的三配置守护进程测试全部通过。
+  - WebUI 英文及中英双语切换测试全部通过，动态主屏设备识别展示正确。
+
+## Google Pixel 7 Pro（cheetah）真机适配验证
+
+- **设备与环境**：Google Pixel 7 Pro (cheetah) / Android 16 (API 36) / Linux 6.1.145 / KernelSU。
+- **真机读取与确认**：
+  - Display 0 识别为 `local:4619827677550801152`，支持 1440 × 3120 与 1080 × 2340 两种几何尺寸（120 Hz LTPO），DisplayDeviceInfo 校验通过。
+  - sysfs 节点确认：`/sys/class/backlight/panel0-backlight`（最大背光 4095）。
+  - 运行时标定表读取：`mBacklight` 与 `mNits` 成功提取自系统显示服务诊断及 `/vendor/etc/displayconfig/display_id_4619827677550801152.xml`，对应 [2.0, 600.0, 1000.0] nits @ [0.0, 0.6, 1.0] 背光比率，保存为 `module/profiles/cheetah.profile`。
+  - 传感器确认：
+    - 前置主光感：`TMD3719 Ambient Light`（AMS，`android.sensor.light`，`on-change`，非唤醒）。
+    - 后置辅助光感：`VD6282 Rear Light Sensor`（STMicro，`com.google.sensor.rear_light`，连续采样，非唤醒）。
+    - 距离感应器：`TMD3719 Proximity (wake-up)`。
+    - 完整支持前后光感交叉校验与 beta.6 `ambient_guard` 位置防误降。
+

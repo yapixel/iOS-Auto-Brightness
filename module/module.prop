@@ -3,4 +3,4 @@ name=iOS Auto Brightness
 version=v7.0.0-beta.22
 versionCode=70022
 author=reF1nd
-description=Open-source adaptive brightness with persistent per-lux preferences. Android 12+ / KernelSU, APatch and Magisk. Capability-based main-display adapter.
+description=Open-source adaptive brightness with persistent per-lux preferences. Android 12+ / Legion Y700 Wuji (TB324ZC), Pixel 7 Pro (cheetah) & altdb.

@@ -193,12 +193,24 @@ public final class Bridge implements SensorEventListener {
         try{display.getClass().getMethod("getBrightnessEvents");}catch(NoSuchMethodException e){events=false;}
         PanelProfile profile;String calibrationDump="";
         try{calibrationDump=displayDump();profile=PanelProfile.fromDump(calibrationDump,displayId);calibrationStatus="system_calibration";}
-        catch(Exception e){profile=PanelProfile.generic(displayId);calibrationStatus="generic_normalized_learning: "+rootCause(e);}
+        catch(Exception e){
+            Display.Mode mode=display.getDisplay(0).getMode();
+            int w=mode.getPhysicalWidth(), h=mode.getPhysicalHeight();
+            File fallback=null;
+            if(((w==1600&&h==2560)||(w==2560&&h==1600))&&(fallback=new File(module,"profiles/y700.profile")).isFile()){
+                try{profile=PanelProfile.fromFile(fallback,displayId);calibrationStatus="preset_profile: y700";}catch(Exception ignored){}
+            }else if(((w==1080&&h==2340)||(w==2340&&h==1080)||(w==1440&&h==3120)||(w==3120&&h==1440))&&(fallback=new File(module,"profiles/cheetah.profile")).isFile()){
+                try{profile=PanelProfile.fromFile(fallback,displayId);calibrationStatus="preset_profile: cheetah";}catch(Exception ignored){}
+            }
+            if(profile==null){profile=PanelProfile.generic(displayId);calibrationStatus="generic_normalized_learning: "+rootCause(e);}
+        }
         calibrated=profile.calibrated;eventCapability=new EventCapability(events);
         profileNits=profile.nits;profileBacklight=profile.brightness;
         String profileName=profile.id;
         // Preserve existing learning only when the complete measured mapping is identical.
         if(calibrated&&profile.matches(read(new File(module,"profiles/altdb.profile"),8192)))profileName="altdb-main-hyperos4";
+        if(calibrated&&profile.matches(read(new File(module,"profiles/y700.profile"),8192)))profileName="y700-main";
+        if(calibrated&&profile.matches(read(new File(module,"profiles/cheetah.profile"),8192)))profileName="cheetah-main";
         replace(new File(state,"active.profile"),profile.encode(profileName));
         sensors=(SensorManager)c.getSystemService(Context.SENSOR_SERVICE);
         power=(PowerManager)c.getSystemService(Context.POWER_SERVICE);

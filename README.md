@@ -22,7 +22,7 @@ Android 12（API 31）及以上，不限制品牌、ROM 或分辨率。安装包
 
 兼容性取决于实际系统能力：直接背光输出需要确认主屏节点、系统 brightness 与 HAL backlight 的相同映射，以及可用的系统温控、限亮原因和亮度上下限。未满足时暂停输出并报告原因，保留诊断和配置功能。只控制默认主屏，物理屏幕切换时重新校准。详见 [兼容性说明](docs/COMPATIBILITY.md)。
 
-真机验证目前仅覆盖小米 17 Pro Max / Android 17 HyperOS 4 / KernelSU。其他设备和系统尚未经过实测，自动测试通过不代表全部真机场景通过。
+真机验证目前覆盖联想拯救者 Y700 无极 / 第五代（TB324ZC）、Google Pixel 7 Pro（cheetah）与小米 17 Pro Max（altdb）。其他设备和系统通过动态校准与标准接口自适应适配。详见 [设备适配](docs/DEVICE.md) 与 [验证记录](docs/VALIDATION.md)。
 
 ## 安装与更新
 

@@ -1,0 +1,4 @@
+IAB_PROFILE_V1 cheetah-main 3
+2.0 0.0
+600.0 0.6
+1000.0 1.0

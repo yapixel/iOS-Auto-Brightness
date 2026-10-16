@@ -23,7 +23,8 @@ public final class SensorChoice {
         return n.contains("raw")||n.contains("fov");
     }
     public static boolean luxSensor(int type,String name,String stringType) {
-        return !auxiliary(name+" "+stringType)&&(type==5||stringType.toLowerCase(Locale.ROOT).contains("lux"));
+        String st=stringType.toLowerCase(Locale.ROOT);
+        return !auxiliary(name+" "+stringType)&&(type==5||st.contains("lux")||st.contains("rear_light"));
     }
     public String encode(){return "front="+front+"\nback="+back+"\nsysfs="+sysfs+"\n";}
     public static String scope(String identity) throws Exception {
