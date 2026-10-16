@@ -154,8 +154,16 @@ public final class Bridge implements SensorEventListener {
             return result.getLong("driver_brightness");
         }catch(Exception e){throw new IOException("panel readback failed",e);}finally{p.destroy();}
     }
+    long panelRead(String n) throws IOException {
+        try{return request("PANEL_READ").getLong("driver_brightness");}
+        catch(Exception e){
+            long actual=Backlight.number(new File(BACKLIGHT_ROOT,n+"/actual_brightness"));
+            if(actual>=0)return actual;
+            throw new IOException("panel readback failed",e);
+        }
+    }
     long panelRead() throws IOException {
-        try{return request("PANEL_READ").getLong("driver_brightness");}catch(Exception e){throw new IOException("panel readback failed",e);}
+        return panelRead(direct!=null?direct.path().substring(direct.path().lastIndexOf('/')+1):"panel0-backlight");
     }
     static String boundedLine(Reader r,int limit) throws IOException {
         StringBuilder b=new StringBuilder();int c;
@@ -222,16 +230,28 @@ public final class Bridge implements SensorEventListener {
                 Properties choice=new Properties();choice.load(new StringReader(read(binding,4096)));
                 if(choice.size()!=2||!displayId.equals(choice.getProperty("display")))throw new IOException("backlight binding display mismatch");
                 node=choice.getProperty("node","");
+                if(profileName.equals("cheetah-main")&&node.equals("panel0-backlight")
+                    &&Backlight.number(new File(BACKLIGHT_ROOT,"panel0-backlight/max_brightness"))==4095){verifiedPanel=true;}
+                if(profileName.equals("altdb-main-hyperos4")&&node.equals("panel0-backlight")
+                    &&Backlight.number(new File(BACKLIGHT_ROOT,"panel0-backlight/max_brightness"))==16383){verifiedPanel=true;}
+                if(profileName.equals("y700-main")&&node.equals("panel0-backlight")
+                    &&Backlight.number(new File(BACKLIGHT_ROOT,"panel0-backlight/max_brightness"))>0){verifiedPanel=true;}
             }else {
                 // Product names can be spoofed per process. Use the verified panel
                 // calibration, main display geometry and dual-panel node ranges.
                 Display.Mode mode=display.getDisplay(0).getMode();
-                if(profileName.equals("altdb-main-hyperos4")&&mode.getPhysicalWidth()==1200&&mode.getPhysicalHeight()==2608
+                int w=mode.getPhysicalWidth(), h=mode.getPhysicalHeight();
+                if(profileName.equals("altdb-main-hyperos4")&&w==1200&&h==2608
                     &&Backlight.number(new File(BACKLIGHT_ROOT,"panel0-backlight/max_brightness"))==16383
                     &&Backlight.number(new File(BACKLIGHT_ROOT,"panel1-backlight/max_brightness"))==4095){node="panel0-backlight";verifiedPanel=true;}
+                else if(profileName.equals("cheetah-main")&&((w==1080&&h==2340)||(w==2340&&h==1080)||(w==1440&&h==3120)||(w==3120&&h==1440))
+                    &&Backlight.number(new File(BACKLIGHT_ROOT,"panel0-backlight/max_brightness"))==4095){node="panel0-backlight";verifiedPanel=true;}
+                else if(profileName.equals("y700-main")&&((w==1600&&h==2560)||(w==2560&&h==1600))
+                    &&Backlight.number(new File(BACKLIGHT_ROOT,"panel0-backlight/max_brightness"))>0){node="panel0-backlight";verifiedPanel=true;}
                 else throw new IOException("explicit main-panel backlight.conf binding required");
             }
-            direct=new DirectBacklight(BACKLIGHT_ROOT,node,new File(state,"direct-output.properties"),displayId,bootId,verifiedPanel?this::panelRead:null,BacklightLease.POSIX,verifiedPanel);
+            final String finalNode=node;
+            direct=new DirectBacklight(BACKLIGHT_ROOT,node,new File(state,"direct-output.properties"),displayId,bootId,verifiedPanel?()->panelRead(finalNode):null,BacklightLease.POSIX,verifiedPanel);
             direct.referenceMode();outputStatus="verifying_mapping";
         }catch(Exception e){outputStatus="backlight_unavailable: "+rootCause(e);}
         loadSensorChoice();
