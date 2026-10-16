@@ -191,7 +191,7 @@ public final class Bridge implements SensorEventListener {
         for(String f:new String[]{"brightness","brightnessMinimum","brightnessMaximum"})number(info,f);
         boolean events=true;
         try{display.getClass().getMethod("getBrightnessEvents");}catch(NoSuchMethodException e){events=false;}
-        PanelProfile profile;String calibrationDump="";
+        PanelProfile profile=null;String calibrationDump="";
         try{calibrationDump=displayDump();profile=PanelProfile.fromDump(calibrationDump,displayId);calibrationStatus="system_calibration";}
         catch(Exception e){
             Display.Mode mode=display.getDisplay(0).getMode();
