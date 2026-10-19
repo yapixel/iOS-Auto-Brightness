@@ -128,22 +128,24 @@ public final class Bridge implements SensorEventListener {
         return (Context)at.getMethod("getSystemContext").invoke(thread);
     }
     static final File BACKLIGHT_ROOT=new File("/sys/class/backlight");
+    static void setTemporaryBrightness(DisplayManager dm,int displayId,float brightness) throws Exception {
+        try {
+            call(dm,"setTemporaryBrightness",new Class<?>[]{int.class,float.class},displayId,brightness);
+        } catch(NoSuchMethodException e) {
+            call(dm,"setTemporaryBrightness",new Class<?>[]{float.class},brightness);
+        }
+    }
+    static void release(DisplayManager dm) throws Exception {
+        setTemporaryBrightness(dm,0,Float.NaN);
+    }
     static void release(Context context,File state,File module) throws Exception {
         // Restore permissions even if the display disappeared or framework IPC fails.
-        String boot=read(new File("/proc/sys/kernel/random/boot_id"),128).trim();
-        DirectBacklight.unlock(BACKLIGHT_ROOT,new File(state,"direct-output.properties"),boot);
+        try {
+            String boot=read(new File("/proc/sys/kernel/random/boot_id"),128).trim();
+            DirectBacklight.unlock(BACKLIGHT_ROOT,new File(state,"direct-output.properties"),boot);
+        } catch(Exception ignored) {}
         DisplayManager dm=(DisplayManager)context.getSystemService(Context.DISPLAY_SERVICE);
-        Object global=Class.forName("android.hardware.display.DisplayManagerGlobal").getMethod("getInstance").invoke(null);
-        Display main=dm.getDisplay(0);if(main==null)return;
-        Object info=call(global,"getBrightnessInfo",new Class<?>[]{int.class},0);
-        PowerManager pm=(PowerManager)context.getSystemService(Context.POWER_SERVICE);
-        boolean safe=pm.getCurrentThermalStatus()==0&&hasField(info,"brightnessMaxReason")&&integer(info,"brightnessMaxReason")==0;
-        boolean manual=false;
-        try{manual=mode(activeUser())==0;}catch(Exception ignored){} // Unknown mode cannot authorize raising brightness.
-        DirectBacklight.restore(BACKLIGHT_ROOT,new File(state,"direct-output.properties"),
-            (String)call(main,"getUniqueId",new Class<?>[]{}),read(new File("/proc/sys/kernel/random/boot_id"),128).trim(),
-            main.getState()==Display.STATE_ON&&pm.isInteractive(),safe&&manual,
-            number(info,hasField(info,"adjustedBrightness")?"adjustedBrightness":"brightness"),number(info,"brightnessMaximum"),()->standalonePanelRead(module));
+        if(dm!=null)release(dm);
     }
     static long standalonePanelRead(File module) throws IOException {
         Process p=new ProcessBuilder(new File(module,"bin/ios_brightness_daemon").getPath(),"--panel-read").start();
@@ -223,37 +225,15 @@ public final class Bridge implements SensorEventListener {
         sensors=(SensorManager)c.getSystemService(Context.SENSOR_SERVICE);
         power=(PowerManager)c.getSystemService(Context.POWER_SERVICE);
         try {
-            if(!calibrated||!DirectBacklight.identityMapping(calibrationDump,displayId))throw new IOException("verified identity brightness/backlight mapping required");
-            String node="";boolean verifiedPanel=false;
-            File binding=new File(state,"backlight.conf");
-            if(binding.isFile()) {
-                Properties choice=new Properties();choice.load(new StringReader(read(binding,4096)));
-                if(choice.size()!=2||!displayId.equals(choice.getProperty("display")))throw new IOException("backlight binding display mismatch");
-                node=choice.getProperty("node","");
-                if(profileName.equals("cheetah-main")&&node.equals("panel0-backlight")
-                    &&Backlight.number(new File(BACKLIGHT_ROOT,"panel0-backlight/max_brightness"))==4095){verifiedPanel=true;}
-                if(profileName.equals("altdb-main-hyperos4")&&node.equals("panel0-backlight")
-                    &&Backlight.number(new File(BACKLIGHT_ROOT,"panel0-backlight/max_brightness"))==16383){verifiedPanel=true;}
-                if(profileName.equals("y700-main")&&node.equals("panel0-backlight")
-                    &&Backlight.number(new File(BACKLIGHT_ROOT,"panel0-backlight/max_brightness"))>0){verifiedPanel=true;}
-            }else {
-                // Product names can be spoofed per process. Use the verified panel
-                // calibration, main display geometry and dual-panel node ranges.
-                Display.Mode mode=display.getDisplay(0).getMode();
-                int w=mode.getPhysicalWidth(), h=mode.getPhysicalHeight();
-                if(profileName.equals("altdb-main-hyperos4")&&w==1200&&h==2608
-                    &&Backlight.number(new File(BACKLIGHT_ROOT,"panel0-backlight/max_brightness"))==16383
-                    &&Backlight.number(new File(BACKLIGHT_ROOT,"panel1-backlight/max_brightness"))==4095){node="panel0-backlight";verifiedPanel=true;}
-                else if(profileName.equals("cheetah-main")&&((w==1080&&h==2340)||(w==2340&&h==1080)||(w==1440&&h==3120)||(w==3120&&h==1440))
-                    &&Backlight.number(new File(BACKLIGHT_ROOT,"panel0-backlight/max_brightness"))==4095){node="panel0-backlight";verifiedPanel=true;}
-                else if(profileName.equals("y700-main")&&((w==1600&&h==2560)||(w==2560&&h==1600))
-                    &&Backlight.number(new File(BACKLIGHT_ROOT,"panel0-backlight/max_brightness"))>0){node="panel0-backlight";verifiedPanel=true;}
-                else throw new IOException("explicit main-panel backlight.conf binding required");
+            try {
+                display.getClass().getMethod("setTemporaryBrightness",int.class,float.class);
+            } catch(NoSuchMethodException e) {
+                display.getClass().getMethod("setTemporaryBrightness",float.class);
             }
-            final String finalNode=node;
-            direct=new DirectBacklight(BACKLIGHT_ROOT,node,new File(state,"direct-output.properties"),displayId,bootId,verifiedPanel?()->panelRead(finalNode):null,BacklightLease.POSIX,verifiedPanel);
-            direct.referenceMode();outputStatus="verifying_mapping";
-        }catch(Exception e){outputStatus="backlight_unavailable: "+rootCause(e);}
+            outputStatus="framework_ready";
+        } catch(Exception e) {
+            outputStatus="framework_unavailable: "+rootCause(e);
+        }
         loadSensorChoice();
         // Missing or failed primary sensors can use the independently registered rear/fallback source.
         // Binding the abstract socket is also the bridge singleton guard.
@@ -467,9 +447,9 @@ public final class Bridge implements SensorEventListener {
         },"iab-interaction-check").start();
     }
     void clearOverride() throws Exception {
-        if(!observe&&(overridden||(direct!=null&&(direct.owned()||direct.locked()))))release(context,state,module);
+        if(!observe&&overridden)release(display);
         overridden=false;lastWrite=-1;
-        if(direct!=null&&(direct.owned()||direct.locked()))direct.released();
+        if(outputStatus.startsWith("framework"))outputStatus="framework_ready";
     }
     void displayChanged() {
         if(closing.get())return;
@@ -724,18 +704,8 @@ public final class Bridge implements SensorEventListener {
             try{thermalStatus=power.getCurrentThermalStatus();}catch(Exception e){thermalStatus=-1;}
             brightnessMaxReason=hasField(info,"brightnessMaxReason")?integer(info,"brightnessMaxReason"):-1;
             protectionReason=protection.update(now,thermalStatus,ProtectionPolicy.capReason(android.os.Build.VERSION.SDK_INT,hasField(info,"brightnessMaxReason"),brightnessMaxReason));
-            if(automatic&&on&&direct!=null)probeOutput(now);
-            else {outputSafe=false;outputVerifiedAt=-10000;outputEpoch++;if(direct!=null)direct.learning.reset();}
-            boolean directReady=!observe&&direct!=null&&automatic&&on&&direct.ready(now,current);
-            if(direct!=null)outputStatus=direct.status;
-            if(!observe&&automatic&&on&&direct!=null&&protectionReason.isEmpty())
-                protectionReason=direct.learning.protection;
-            // Direct writes bypass framework application of limits; require a cap reason
-            // plus a recent unmodified automatic output and verified driver mapping.
-            if(brightnessMaxReason<0)outputStatus="direct_cap_reason_unavailable";
-            boolean directBlocked=!directReady||brightnessMaxReason<0||!outputSafe||now-outputVerifiedAt>2000;
             boolean learningBlocked=blocked||!protectionReason.isEmpty();
-            blocked=learningBlocked||(!observe&&directBlocked);
+            blocked=learningBlocked;
             frameBlocked=blocked;
             if(!protectionReason.isEmpty()){eventStatus="paused_system_protection";clearOverride();pending=null;manual.cancel();settingsLearning.reset();lastEvent=System.currentTimeMillis();learningLux.reset();}
             // On-change light sensors may be silent while stable; registration stays active.
@@ -751,7 +721,7 @@ public final class Bridge implements SensorEventListener {
             learningLux.observe(lux,now,System.currentTimeMillis());
             eligible=automatic&&on&&!learningBlocked&&!near&&lux>=0;
             if(interaction.waiting()){request("HOLD "+now);probeInteraction(now);}
-            result=request(String.format(Locale.ROOT,"FRAME3 %d %d %d %.8f %.8f %d %.4f %d %d %.9f %.9f %.9f %d %d %.8f",now,automatic?1:0,on?1:0,lux,backLux,near?1:0,temperature,battery,charging?1:0,(direct!=null&&!observe?direct.frameBrightness(current):current),minimum,maximum,blocked?1:0,Calendar.getInstance().get(Calendar.HOUR_OF_DAY),luxSource.equals("dual_max_v1")?primary:-1));
+            result=request(String.format(Locale.ROOT,"FRAME3 %d %d %d %.8f %.8f %d %.4f %d %d %.9f %.9f %.9f %d %d %.8f",now,automatic?1:0,on?1:0,lux,backLux,near?1:0,temperature,battery,charging?1:0,current,minimum,maximum,blocked?1:0,Calendar.getInstance().get(Calendar.HOUR_OF_DAY),luxSource.equals("dual_max_v1")?primary:-1));
             if(result.optString("reason").startsWith("proximity")||result.optBoolean("ambient_guard")||!result.optBoolean("enabled")){eligible=false;learningLux.reset();}
             if(!automatic||!on||!result.optBoolean("enabled")){pending=null;manual.cancel();settingsLearning.reset();lastEvent=System.currentTimeMillis();}
             else if(referenceControl) {
@@ -777,41 +747,36 @@ public final class Bridge implements SensorEventListener {
             }
             if(result.optBoolean("apply")&&!interaction.waiting()&&now-changedAt>=2000&&pending==null&&manual.at<0&&!blocked&&!observe) {
                 float target=(float)result.getDouble("target");
-                Object latest=call(global,"getBrightnessInfo",new Class<?>[]{int.class},0);
-                long writeNow=SystemClock.elapsedRealtime();
-                Display active=display.getDisplay(0);
-                boolean safe=active!=null&&active.getState()==Display.STATE_ON&&power.isInteractive()&&mode(user)==1
-                    &&power.getCurrentThermalStatus()==0&&hasField(latest,"brightnessMaxReason")&&integer(latest,"brightnessMaxReason")==0
-                    &&!windowBlocked(latest,writeNow)&&integer(latest,"highBrightnessMode")!=2
-                    &&outputSafe&&writeNow-outputVerifiedAt<=2000;
-                if(safe&&!externalBrightness(latest,writeNow)&&!interaction.waiting()&&direct.ready(writeNow,adjusted(latest))) {
-                    direct.write(target,number(latest,"brightnessMaximum"));
-                    // Monitor system output independently of our raw-node target.
-                    interaction.wrote(writeNow,adjusted(latest),adjusted(latest));
-                    lastWrite=target;overridden=true;outputStatus=direct.status;
-                }else clearOverride();
-            }else if(referenceControl&&automatic&&!on&&result.optBoolean("enabled")&&protectionReason.isEmpty()&&direct!=null&&direct.locked()) {
-                direct.suspend();outputStatus=direct.status;
+                if(!overridden||Math.abs(target-lastWrite)>.00001) {
+                    Object latest=call(global,"getBrightnessInfo",new Class<?>[]{int.class},0);
+                    long writeNow=SystemClock.elapsedRealtime();
+                    Display active=display.getDisplay(0);
+                    boolean safe=active!=null&&active.getState()==Display.STATE_ON&&power.isInteractive()&&mode(user)==1
+                        &&power.getCurrentThermalStatus()==0&&(!hasField(latest,"brightnessMaxReason")||integer(latest,"brightnessMaxReason")==0)
+                        &&!windowBlocked(latest,writeNow)&&integer(latest,"highBrightnessMode")!=2;
+                    if(safe&&!externalBrightness(latest,writeNow)&&!interaction.waiting()) {
+                        setTemporaryBrightness(display,0,target);
+                        interaction.wrote(writeNow,adjusted(latest),target);
+                        lastWrite=target;overridden=true;outputStatus="framework_active";
+                    }else clearOverride();
+                }
             }else clearOverride();
             bridgeError="";
             boolean steady=result.optBoolean("apply")&&result.optBoolean("settled")&&pending==null&&manual.until==0&&now-changedAt>5000&&(luxSource.equals("front")||luxSource.equals("dual_max_v1"))&&(result.optBoolean("ambient_guard")||!PollCadence.changed(lux,(float)result.optDouble("lux",-1)));
             pollMs=registered?(near?8000:cadence.next(now,lux,steady,battery>=0&&battery<15&&!charging)):5000;
             if(result.optString("reason").equals("proximity_pending")||result.optString("reason").equals("proximity_recovery"))pollMs=100;
             if(eligible&&result.optBoolean("settings_learning"))pollMs=Math.min(pollMs,1000);
-            // Raw-node ownership and driver protection have no framework callback.
-            if(automatic&&on&&direct!=null)pollMs=Math.min(pollMs,100);
             if(interaction.waiting())pollMs=100;
             else if(automatic&&on&&brightnessListener.equals("polling_fallback"))pollMs=Math.min(pollMs,250);
             if(interaction.waiting())result.put("reason","external_brightness_hold").put("apply",false);
-            if(!observe&&automatic&&on&&directBlocked)result.put("reason",direct==null||!directReady||brightnessMaxReason<0?outputStatus:"direct_system_output_hold").put("apply",false);
             if(!protectionReason.isEmpty())result.put("reason",protectionReason).put("apply",false);
             result.put("boot_id",bootId).put("bridge_pid",android.os.Process.myPid())
                 .put("bridge_start",Health.processStart(android.os.Process.myPid())).put("core_start",Health.processStart(result.optLong("core_pid",-1)))
-                .put("output_backend","direct_sysfs").put("output_status",outputStatus)
-                .put("backlight_write_locked",direct!=null&&direct.locked())
-                .put("driver_learning_status",direct==null||observe?"not_applicable":direct.learning.status)
-                .put("backlight_node",direct==null?"":direct.path()).put("backlight_requested",direct==null?-1:direct.requested())
-                .put("backlight_actual",direct==null?-1:direct.actual()).put("backlight_maximum",direct==null?-1:direct.maximum)
+                .put("output_backend","framework_temporary").put("output_status",overridden?"framework_active":outputStatus)
+                .put("backlight_write_locked",false)
+                .put("driver_learning_status","not_applicable")
+                .put("backlight_node","").put("backlight_requested",-1)
+                .put("backlight_actual",-1).put("backlight_maximum",-1)
                 .put("protection_signals",hasField(info,"brightnessMaxReason")?"thermal_and_cap_reason":"thermal_and_system_cap_only")
                 .put("thermal_status",thermalStatus).put("brightness_max_reason",brightnessMaxReason).put("protection",protectionReason.isEmpty()?"clear":protectionReason)
                 .put("manual_learning_available",!referenceControl).put("manual_learning_armed",manual.until>now).put("learning_scope",learningScope).put("sensor_selection",sensorSelectionStatus)

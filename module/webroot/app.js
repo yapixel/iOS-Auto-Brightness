@@ -275,7 +275,7 @@ async function refresh(load=false) {
     const cardRows = [
       [cardLabels[0],s.bridge],
       [cardLabels[1],s.protection&&s.protection!=='clear'?(lang==='zh'?'系统保护':'System Protection'):s.ambient_guard?(lang==='zh'?'位置变化保护':'Ambient Guard'):s.reason],
-      [cardLabels[2],s.output_backend==='direct_sysfs'?(lang==='zh'?'直接写背光':'Direct Backlight'):s.output_backend??'—'],
+      [cardLabels[2],s.output_backend==='direct_sysfs'?(lang==='zh'?'直接写背光':'Direct Backlight'):s.output_backend==='framework_temporary'?(lang==='zh'?'框架标准接口':'Framework DisplayManager'):s.output_backend??'—'],
       [cardLabels[3],s.output_status??'—'],
       [cardLabels[4],s.mode],
       [cardLabels[5],s.lux>=0?`${s.lux.toFixed(1)} lux`:(lang==='zh'?'等待传感器':'Waiting for sensor')],
