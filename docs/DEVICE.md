@@ -1,6 +1,6 @@
 # 目标设备适配
 
-初始读取日期：2026-10-15。当前分支支持联想拯救者 Y700 无极 / 第五代（TB324ZC）与 Google Pixel 7 Pro（cheetah），运行 Android 16（API 36）/ KernelSU；同时保留小米 17 Pro Max（altdb）作为兼容基线。
+初始读取日期：2026-10-15。当前分支支持 Google Pixel 7 Pro（cheetah）与联想拯救者 Y700 无极 / 第五代（TB324ZC），运行 Android 12+ / KernelSU。
 
 ## 硬件与接口
 
@@ -21,12 +21,6 @@
 - 主屏亮度标定：取自系统显示服务诊断与 `/vendor/etc/displayconfig/display_id_4619827677550801152.xml`，分段线性锚点为 2.0 nits（背光 0.0）、600.0 nits（背光 0.6 手动上限）、1000.0 nits（背光 1.0 阳光高亮），保存为 `module/profiles/cheetah.profile`。
 - 桥接层按屏幕几何尺寸（横竖屏 1080 × 2340 / 2340 × 1080 与 1440 × 3120 / 3120 × 1440）自动识别并加载 `cheetah.profile`。
 - 温控采集支持 `thermal_zone15`（battery）与 `thermal_zone8`（`quiet_therm`，机身表面测温）。
-
-### 小米 17 Pro Max（altdb）
-- 主屏 1200 × 2608；背屏 976 × 596。模块只向 Display 0 发出调光请求。
-- 主屏 sysfs 最大背光 16383，存在独立的 panel1 背屏节点。
-- 主光线传感器：tcs3760 Ambient Light Sensor Non-wakeup；背侧辅助传感器为厂商 back_lux 类型。
-- 主屏亮度标定记录在 `module/profiles/altdb.profile`。
 
 ## 控制与学习
 

@@ -9,8 +9,7 @@ let lang = isTest ? 'zh' : ((typeof localStorage !== 'undefined' && localStorage
 
 const deviceMap = {
   'y700-main': 'Lenovo Legion Y700 Wuji (Gen 5 / TB324ZC)',
-  'cheetah-main': 'Google Pixel 7 Pro (cheetah)',
-  'altdb-main-hyperos4': 'Xiaomi 17 Pro Max (altdb)'
+  'cheetah-main': 'Google Pixel 7 Pro (cheetah)'
 };
 
 const I18N = {
@@ -302,7 +301,12 @@ async function refresh(load=false) {
       : `Red dot: Framework brightness · Ambient ${s.lux>=0?s.lux.toFixed(2):'—'} lux · Setting ${s.setting>=0?(s.setting*100).toFixed(2):'—'}%`;
     if(load&&!dirty)setConfig(await readConfig());
     if(!busy)note(s.protection&&s.protection!=='clear'?(lang==='zh'?'系统保护优先：已释放亮度控制并暂停学习。':'System protection: released brightness control and paused learning.'):s.ambient_guard?(lang==='zh'?'前后光感变化不一致：保持亮度，暂停学习。':'Ambient disparity: holding brightness, pausing learning.'):s.observation_only?(lang==='zh'?'观察模式：记录学习，不控制屏幕。':'Observation mode: recording preferences without controlling screen.'):s.control_policy==='v68'?(lang==='zh'?'参考调光流程：多个偏好样本共同修正预设曲线，偏移有界并持久保存。':'Reference policy: preference samples calibrate baseline curve.'):s.settings_learning?(lang==='zh'?'持续兼容学习已开启：真实事件优先，也会根据设置变化推断调节，可能误学。':'Settings learning enabled.'):s.learning_available?(lang==='zh'?'已连接。手动调节后，请确认学习状态以 saved 开头。':'Connected. After manual adjustment, verify learning status begins with saved.'):(lang==='zh'?'自动事件学习不可用，可点击“学习下一次手动调节”后再拖亮度条。':'Event learning unavailable; click "Learn Next Manual Adjustment" then drag brightness.'));
-    const devName = s.profile ? (deviceMap[s.profile] || s.profile) : (lang === 'zh' ? '正在检测…' : 'Detecting profile…');
+    let devName = lang === 'zh' ? '正在检测…' : 'Detecting profile…';
+    if (s.profile) {
+      if (s.profile.startsWith('cheetah-main')) devName = 'Google Pixel 7 Pro (cheetah)';
+      else if (s.profile.startsWith('y700-main')) devName = 'Lenovo Legion Y700 Wuji (Gen 5 / TB324ZC)';
+      else devName = deviceMap[s.profile] || s.profile;
+    }
     if ($('deviceFooter')) {
       $('deviceFooter').textContent = lang === 'zh'
         ? `主屏适配：${devName} · Android 12+。系统手动模式下释放控制。`
